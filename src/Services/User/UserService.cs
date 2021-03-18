@@ -1,6 +1,7 @@
 ﻿using DataBox.Database.Contexts;
 using DataBox.Entities;
-using DataBox.Models;
+using DataBox.Entities.Authentication;
+using DataBox.Models.Authentication;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
@@ -19,17 +20,22 @@ namespace DataBox.Services
     {
         private readonly ApplicationContext _context;
         private readonly IConfiguration _configuration;
+        private readonly ISecurityService _securityService;
 
-        public UserService(ApplicationContext context, IConfiguration configuration)
+        public UserService(ApplicationContext context, IConfiguration configuration, ISecurityService securityService)
         {
             _context = context;
             _configuration = configuration;
+            _securityService = securityService;
         }
 
         public async Task<User> Add(User entity)
         {
-            if (await _context.Set<User>().AnyAsync(u => u.Name == entity.Name && u.Password == entity.Password))
+            if (await _context.Set<User>().AnyAsync(u => u.Name == entity.Name))
                 return null;
+
+            // Secure password for storing.
+            entity.Password = _securityService.Hash(entity.Password);
 
             _context.Set<User>().Add(entity);
             await _context.SaveChangesAsync();
@@ -42,9 +48,7 @@ namespace DataBox.Services
             var entity = await _context.Set<User>().FindAsync(id);
 
             if (entity == null)
-            {
                 return entity;
-            }
 
             _context.Set<User>().Remove(entity);
             await _context.SaveChangesAsync();
@@ -72,9 +76,9 @@ namespace DataBox.Services
 
         public async Task<AuthenticateResponse> Authenticate(AuthenticateRequest request)
         {
-            var user = await _context.Set<User>().SingleOrDefaultAsync(u => u.Name == request.Name && u.Password == request.Password);
+            var user = await _context.Set<User>().SingleOrDefaultAsync(u => u.Name == request.Name);
 
-            if (user == null)
+            if (!_securityService.Verify(request.Password, user.Password))
                 return null;
 
             var jwt = GenerateJwt(user);
@@ -94,12 +98,12 @@ namespace DataBox.Services
             if (user == null)
                 return false;
 
-            var refreshToken = user.RefreshTokens.Single(t => t.Token == token);
+            var refreshToken = user.RefreshTokens.Single(x => x.Token == token);
 
             if (!refreshToken.IsActive)
                 return false;
 
-            refreshToken.Revoked = DateTime.Now;
+            user.RefreshTokens.Remove(refreshToken);
 
             await Update(user);
 
@@ -113,17 +117,14 @@ namespace DataBox.Services
             if (user == null)
                 return null;
 
-            var refreshToken = user.RefreshTokens.Single(t => t.Token == token);
+            var refreshToken = user.RefreshTokens.Single(x => x.Token == token);
 
             if (!refreshToken.IsActive)
                 return null;
 
             var newRefreshToken = GenerateRefreshToken();
 
-            // Change old token properties.
-            refreshToken.Revoked = DateTime.Now;
-            refreshToken.ReplacedByToken = newRefreshToken.Token;
-
+            user.RefreshTokens.Remove(refreshToken);
             user.RefreshTokens.Add(newRefreshToken);
 
             var jwt = GenerateJwt(user);
@@ -174,7 +175,7 @@ namespace DataBox.Services
                 return new RefreshToken
                 {
                     Token = Convert.ToBase64String(randomBytes),
-                    Expires = DateTime.Now.AddDays(5),
+                    Expires = DateTime.Now.AddDays(15),
                     Created = DateTime.Now
                 };
             }

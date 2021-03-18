@@ -33,8 +33,13 @@ namespace DataBox
         {
             services.AddControllersWithViews();
 
-            // Custom services.
+            // Configure custom services.
             services.AddUserService();
+            services.AddSecurityService();
+            services.AddHttpStorageService(client =>
+            {
+                client.BaseAddress = new Uri(Configuration["ApiBaseUrl"]);
+            });
 
             // Configure database.
             services.AddDbContext<ApplicationContext>(options =>
@@ -43,6 +48,7 @@ namespace DataBox
             });
 
             services
+                .AddCors()
                 .AddAuthentication(options =>
                 {
                     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -59,6 +65,7 @@ namespace DataBox
                         ValidateIssuer = true,
                         ValidIssuer = Configuration["JWT:Issuer"],
                         ValidateAudience = true,
+                        ClockSkew = TimeSpan.Zero,
                         ValidAudience = Configuration["JWT:Audience"],
                         ValidateLifetime = true,
                     };
@@ -91,6 +98,13 @@ namespace DataBox
 
             app.UseAuthentication();
             app.UseAuthorization();
+
+            app.UseCors(builder => {
+                builder
+                    .AllowAnyOrigin()
+                    .AllowAnyMethod()
+                    .AllowAnyHeader();
+            });
 
             app.UseEndpoints(endpoints =>
             {

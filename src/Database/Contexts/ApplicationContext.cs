@@ -1,4 +1,4 @@
-﻿using DataBox.Entities;
+﻿using DataBox.Entities.Authentication;
 using Microsoft.EntityFrameworkCore;
 
 namespace DataBox.Database.Contexts

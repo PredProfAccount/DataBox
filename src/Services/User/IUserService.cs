@@ -1,7 +1,7 @@
-﻿using System.Collections.Generic;
+﻿using DataBox.Entities.Authentication;
+using DataBox.Models.Authentication;
+using System.Collections.Generic;
 using System.Threading.Tasks;
-using DataBox.Entities;
-using DataBox.Models;
 
 namespace DataBox.Services
 {
